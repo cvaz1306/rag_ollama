@@ -6,13 +6,16 @@ import ollama
 import requests
 import json
 import asyncio
+
 # Initialize ChromaDB client
 client = chromadb.PersistentClient(path="./cdb")
 collection_name = "docs"
 model = "gemma:2b"
+
 # Check if the collection name exists in the list of collections
 exists = collection_name in [c.name for c in client.list_collections()]
 collection = client.get_or_create_collection(collection_name)
+
 def keep_alive(model: str, keep_alive):
     url = "http://localhost:11434/api/generate"
     headers = {'Content-Type': 'application/json'}
@@ -27,8 +30,10 @@ def keep_alive(model: str, keep_alive):
         return response.json()
     else:
         response.raise_for_status()
+
 st.info(f"Preloading Model: {model}")
 keep_alive(model, -1)
+
 def sliding_window_text(pdf_file, window_size, stride):
     with open(pdf_file, 'rb') as file:
         pdf_reader = PyPDF2.PdfReader(file)
@@ -63,6 +68,7 @@ def file_hash(file):
     buf = file.read()
     hasher.update(buf)
     return hasher.hexdigest()
+
 async def on_query():
     st.info("Processing your query...")
     
@@ -80,27 +86,31 @@ async def on_query():
             query_texts=[query],
             n_results=1
         )
-        print(q_result)
 
-    st.write("Query processed. Generating response...")
+    st.info("Query processed. Generating response...")
 
     # Stream the response from the model
     response_placeholder = st.empty()
     response = ""
-    print(q_result['documents'][0][0])
+
+    text_passed_to_llm = q_result['documents'][0][0]
+    
+    # Display the text passed to the LLM in the sidebar
+    with st.sidebar:
+        st.header("Text Passed to LLM")
+        st.write(text_passed_to_llm)
+
     stream = ollama.chat(
         model=model,
-        messages=[{'role': 'user', 'content': f"Answer the following question using the provided text as a resource. Do not repeat or mention the text, summarize it, and synthesize a response to answer the question:\n\"{query}\"\n\n\"{q_result['documents'][0][0]}\""}],
+        messages=[{'role': 'user', 'content': f"Answer the following question using the provided text as a resource. Do not repeat or mention the text, summarize it, and synthesize a response to answer the question:\n\"{query}\"\n\n\"{text_passed_to_llm}\""}],
         stream=True,
     )
 
     for chunk in stream:
         response += chunk['message']['content']
-        print(chunk['message']['content'], end="", flush=True)
         response_placeholder.markdown(response)
 
-    st.write("Response generated:")
-    st.write(response)
+    st.success("Response generated:")
 
 st.title("PDF Query and Answer System")
 uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
@@ -117,8 +127,7 @@ if uploaded_file is not None:
         n_results=1, 
         where={"file_hash": file_id}
     )
-    print(len(existing_docs['documents'][0]))
-    if len(existing_docs['documents'][0])<1: #not existing_docs['documents']:
+    if len(existing_docs['documents'][0]) < 1:  # not existing_docs['documents']:
         with open("temp.pdf", "wb") as f:
             f.write(uploaded_file.getbuffer())
         index_pdf("temp.pdf", window_size, stride, uploaded_file.name, file_id)
