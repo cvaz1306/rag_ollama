@@ -31,8 +31,8 @@ def keep_alive(model: str, keep_alive):
     else:
         response.raise_for_status()
 
-st.info(f"Preloading Model: {model}")
-keep_alive(model, -1)
+with st.info(f"Preloading Model: {model}"):
+    keep_alive(model, -1)
 
 def sliding_window_text(pdf_file, window_size, stride):
     with open(pdf_file, 'rb') as file:
@@ -70,7 +70,7 @@ def file_hash(file):
     return hasher.hexdigest()
 
 async def on_query():
-    st.info("Processing your query...")
+    st.toast("Processing your query...")
     
     # Query without metadata filtering if no file is uploaded
     if uploaded_file is not None:
@@ -87,7 +87,7 @@ async def on_query():
             n_results=1
         )
 
-    st.info("Query processed. Generating response...")
+    st.toast("Query processed. Generating response...")
 
     # Stream the response from the model
     response_placeholder = st.empty()
@@ -102,15 +102,16 @@ async def on_query():
 
     stream = ollama.chat(
         model=model,
-        messages=[{'role': 'user', 'content': f"Answer the following question using the provided text as a resource. Do not repeat or mention the text, summarize it, and synthesize a response to answer the question:\n\"{query}\"\n\n\"{text_passed_to_llm}\""}],
+        messages=[{'role': 'user', 'content': f"Answer the following question using the provided text as a resource. Do not repeat or mention the text, and if the text is nonsensical or irrelevant, generate your own answer, after indicating you could not find anything useful in the text. Instead, summarize it, and synthesize a response to answer the question:\n\"{query}\"\n\n\"{text_passed_to_llm}\""}],
         stream=True,
     )
 
     for chunk in stream:
         response += chunk['message']['content']
         response_placeholder.markdown(response)
-
+    response_placeholder.empty()
     st.success("Response generated:")
+    st.markdown(response)
 
 st.title("PDF Query and Answer System")
 uploaded_file = st.file_uploader("Upload a PDF file", type="pdf")
